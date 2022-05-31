@@ -101,7 +101,7 @@ namespace RogueEssence.Dungeon
         public bool ShowActions;
         
         public MinimapState ShowMap;
-        public Loc MinimapOffset;
+
         
         /// <summary>
         /// Rectangle of the tiles that are relevant to sight computation.
@@ -192,17 +192,9 @@ namespace RogueEssence.Dungeon
 
             if (input.JustPressed(FrameInput.InputType.Test))
             {
-                if (DataManager.Instance.CurrentReplay == null)
-                {
-                    //For Test
-                    DebugEmote = (DebugEmote + 1) % GraphicsManager.Emotions.Count;
-                    LogMsg(String.Format("Emotion: {0}", GraphicsManager.Emotions[DebugEmote].Name));
-                }
-                else
-                {
-                    DataManager.Instance.CreateQuicksaveFromReplay();
-                    LogMsg(String.Format("Created quicksave."));
-                }
+                //For Test
+                DebugEmote = (DebugEmote + 1) % GraphicsManager.Emotions.Count;
+                LogMsg(String.Format("Emotion: {0}", GraphicsManager.Emotions[DebugEmote].Name));
                 //BaseMonsterForm form = DataManager.Instance.GetMonster(ActiveTeam.Leader.BaseForm.Species).Forms[ActiveTeam.Leader.BaseForm.Form];
                 //ActiveTeam.Leader.MaxHPBonus = form.GetMaxStatBonus(Stat.HP);
                 //ActiveTeam.Leader.AtkBonus = form.GetMaxStatBonus(Stat.Attack);
@@ -274,7 +266,8 @@ namespace RogueEssence.Dungeon
                 yield return new WaitUntil(AnimationsOver);
 
                 GameManager.Instance.FrameProcessed = false;
-                ReloadFocusedPlayer();
+
+                focusedPlayerIndex = ZoneManager.Instance.CurrentMap.CurrentTurnMap.GetCurrentTurnChar().Char;
 
                 if (IsPlayerLeaderTurn() && PendingLeaderAction != null)
                 {
@@ -326,14 +319,13 @@ namespace RogueEssence.Dungeon
                 if (DataManager.Instance.CurrentReplay.Paused)
                 {
                     if (input.JustPressed(FrameInput.InputType.Minimap))
-                    {
                         ShowMap = (MinimapState)((int)(ShowMap + 1) % 3);
-                        MinimapOffset = Loc.Zero;
-                    }
 
                     //multi-button presses
                     if (ShowMap == MinimapState.Detail)
-                        ProcessMinimapInput(input);
+                    {
+
+                    }
                     else if (DataManager.Instance.CurrentReplay.OpenMenu)
                     {
                         yield return CoroutineManager.Instance.StartCoroutine(MenuManager.Instance.ProcessMenuCoroutine(new MainMenu()));
@@ -354,7 +346,6 @@ namespace RogueEssence.Dungeon
                     {
                         DataManager.Instance.ResumePlay(DataManager.Instance.CurrentReplay);
                         DataManager.Instance.CurrentReplay = null;
-                        DataManager.Instance.Save.UpdateOptions();
 
                         GameManager.Instance.SetFade(true, false);
 
@@ -444,14 +435,13 @@ namespace RogueEssence.Dungeon
                 else
                 {
                     if (input.JustPressed(FrameInput.InputType.Minimap) && !input[FrameInput.InputType.Skills])
-                    {
                         ShowMap = (MinimapState)((int)(ShowMap + 1) % 3);
-                        MinimapOffset = Loc.Zero;
-                    }
 
                     //multi-button presses
                     if (ShowMap == MinimapState.Detail)
-                        ProcessMinimapInput(input);
+                    {
+
+                    }
                     else if (input[FrameInput.InputType.Skills])
                     {
                         int skillIndex = -1;
@@ -674,28 +664,6 @@ namespace RogueEssence.Dungeon
             }
         }
 
-        private void ProcessMinimapInput(InputManager input)
-        {
-            if (input.Direction != Dir8.None)
-            {
-                int input_gap = 2;
-                if ((input.InputTime - input.AddedInputTime) / input_gap < input.InputTime / input_gap)
-                {
-                    MinimapOffset += input.Direction.GetLoc();
-
-                    Loc centerLoc = new Loc();
-                    if (FocusedCharacter != null)
-                        centerLoc = FocusedCharacter.CharLoc;
-                    Loc startLoc = new Loc(Math.Max(0, Math.Min(centerLoc.X - MAX_MINIMAP_WIDTH / 2, ZoneManager.Instance.CurrentMap.Width - MAX_MINIMAP_WIDTH)),
-                        Math.Max(0, Math.Min(centerLoc.Y - MAX_MINIMAP_HEIGHT / 2, ZoneManager.Instance.CurrentMap.Height - MAX_MINIMAP_HEIGHT)));
-                    Loc endLoc = startLoc + MinimapOffset;
-                    endLoc = new Loc(Math.Max(0, Math.Min(endLoc.X, ZoneManager.Instance.CurrentMap.Width - MAX_MINIMAP_WIDTH)),
-                        Math.Max(0, Math.Min(endLoc.Y, ZoneManager.Instance.CurrentMap.Height - MAX_MINIMAP_HEIGHT)));
-                    MinimapOffset = endLoc - startLoc;
-                }
-            }
-        }
-
         public override void Update(FrameTick elapsedTime)
         {
             //update UI notes
@@ -822,9 +790,9 @@ namespace RogueEssence.Dungeon
             return !outOfBounds && (ZoneManager.Instance.CurrentMap.DiscoveryArray[xx][yy] == Map.DiscoveryState.Traversed);
         }
 
-        protected override void PrepareTileDraw(SpriteBatch spriteBatch, int xx, int yy, bool seeTrap)
+        protected override void PrepareTileDraw(SpriteBatch spriteBatch, int xx, int yy)
         {
-            base.PrepareTileDraw(spriteBatch, xx, yy, seeTrap);
+            base.PrepareTileDraw(spriteBatch, xx, yy);
 
             if (Turn && !ZoneManager.Instance.CurrentMap.TileBlocked(new Loc(xx, yy), FocusedCharacter.Mobility))
             {
@@ -893,19 +861,6 @@ namespace RogueEssence.Dungeon
             return false;
         }
 
-        protected override bool CanSeeTraps()
-        {
-            if (SeeAll)
-                return true;
-
-            foreach (Character member in ActiveTeam.Players)
-            {
-                if (member.SeeTraps)
-                    return true;
-            }
-            return false;
-        }
-
         protected override void DrawItems(SpriteBatch spriteBatch, bool showHiddenItem)
         {
             base.DrawItems(spriteBatch, showHiddenItem);
@@ -940,14 +895,12 @@ namespace RogueEssence.Dungeon
                 if (ShowMap != MinimapState.Detail)
                     DrawGame(spriteBatch);
 
+
                 if ((ShowMap != MinimapState.None) && !Turn && !ShowActions && !DataManager.Instance.Save.CutsceneMode && MenuManager.Instance.MenuCount == 0)
                 {
                     //draw minimap
                     spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, Matrix.CreateScale(new Vector3(matrixScale, matrixScale, 1)));
 
-                    float mapVis = 1f;
-                    if (ShowMap == MinimapState.Clear)
-                        mapVis = (0.01f * DiagManager.Instance.CurSettings.Minimap);
                     TileSheet mapSheet = GraphicsManager.MapSheet;
 
                     Vector2 mapStart = new Vector2(0, 16);
@@ -959,12 +912,11 @@ namespace RogueEssence.Dungeon
                         mobility |= (1U << (int)TerrainData.Mobility.Abyss);
                     }
 
-                    Loc centerLoc = new Loc();
+                    Loc startLoc = new Loc();
                     if (FocusedCharacter != null)
-                        centerLoc = FocusedCharacter.CharLoc;
-                    Loc startLoc = new Loc(Math.Max(0, Math.Min(centerLoc.X - MAX_MINIMAP_WIDTH / 2, ZoneManager.Instance.CurrentMap.Width - MAX_MINIMAP_WIDTH)),
-                        Math.Max(0, Math.Min(centerLoc.Y - MAX_MINIMAP_HEIGHT / 2, ZoneManager.Instance.CurrentMap.Height - MAX_MINIMAP_HEIGHT)));
-                    startLoc += MinimapOffset;
+                        startLoc = FocusedCharacter.CharLoc;
+                    startLoc = new Loc(Math.Max(0, Math.Min(startLoc.X - MAX_MINIMAP_WIDTH / 2, ZoneManager.Instance.CurrentMap.Width - MAX_MINIMAP_WIDTH)),
+                        Math.Max(0, Math.Min(startLoc.Y - MAX_MINIMAP_HEIGHT / 2, ZoneManager.Instance.CurrentMap.Height - MAX_MINIMAP_HEIGHT)));
 
                     for (int ii = startLoc.X; ii < ZoneManager.Instance.CurrentMap.Width && ii - startLoc.X < MAX_MINIMAP_WIDTH; ii++)
                     {
@@ -980,33 +932,35 @@ namespace RogueEssence.Dungeon
                                 TerrainData terrain = tile.Data.GetData();
                                 if (ShowMap == MinimapState.Detail)
                                 {
-                                    if (terrain.MinimapColor != Color.White && terrain.MinimapColor != Color.Transparent)
-                                        GraphicsManager.Pixel.Draw(spriteBatch, destVector, null, terrain.MinimapColor * mapVis, new Vector2(mapSheet.TileWidth, mapSheet.TileHeight));
+                                    if (terrain.BlockType == TerrainData.Mobility.Water)
+                                        GraphicsManager.Pixel.Draw(spriteBatch, destVector, null, Color.Blue, new Vector2(mapSheet.TileWidth, mapSheet.TileHeight));
+                                    else if (terrain.BlockType == TerrainData.Mobility.Lava)
+                                        GraphicsManager.Pixel.Draw(spriteBatch, destVector, null, Color.DarkOrange, new Vector2(mapSheet.TileWidth, mapSheet.TileHeight));
+                                    else if (terrain.BlockType == TerrainData.Mobility.Abyss)
+                                        GraphicsManager.Pixel.Draw(spriteBatch, destVector, null, Color.Gray, new Vector2(mapSheet.TileWidth, mapSheet.TileHeight));
                                 }
 
                                 if (!ZoneManager.Instance.CurrentMap.TileBlocked(new Loc(ii, jj), mobility))
                                 {
                                     //draw halls
                                     if (ZoneManager.Instance.CurrentMap.TerrainBlocked(new Loc(ii, jj - 1), mobility))
-                                        mapSheet.DrawTile(spriteBatch, destVector, 0, 0, (discovery == Map.DiscoveryState.Traversed ? Color.White : Color.DarkGray) * mapVis);
+                                        mapSheet.DrawTile(spriteBatch, destVector, 0, 0, discovery == Map.DiscoveryState.Traversed ? Color.White : Color.DarkGray);
                                     if (ZoneManager.Instance.CurrentMap.TerrainBlocked(new Loc(ii, jj + 1), mobility))
-                                        mapSheet.DrawTile(spriteBatch, destVector, 0, 1, (discovery == Map.DiscoveryState.Traversed ? Color.White : Color.DarkGray) * mapVis);
+                                        mapSheet.DrawTile(spriteBatch, destVector, 0, 1, discovery == Map.DiscoveryState.Traversed ? Color.White : Color.DarkGray);
                                     if (ZoneManager.Instance.CurrentMap.TerrainBlocked(new Loc(ii - 1, jj), mobility))
-                                        mapSheet.DrawTile(spriteBatch, destVector, 1, 0, (discovery == Map.DiscoveryState.Traversed ? Color.White : Color.DarkGray) * mapVis);
+                                        mapSheet.DrawTile(spriteBatch, destVector, 1, 0, discovery == Map.DiscoveryState.Traversed ? Color.White : Color.DarkGray);
                                     if (ZoneManager.Instance.CurrentMap.TerrainBlocked(new Loc(ii + 1, jj), mobility))
-                                        mapSheet.DrawTile(spriteBatch, destVector, 1, 1, (discovery == Map.DiscoveryState.Traversed ? Color.White : Color.DarkGray) * mapVis);
+                                        mapSheet.DrawTile(spriteBatch, destVector, 1, 1, discovery == Map.DiscoveryState.Traversed ? Color.White : Color.DarkGray);
                                 }
 
                                 if (discovery == Map.DiscoveryState.Traversed && tile.Effect.ID > -1 && (tile.Effect.Exposed || SeeAll))
                                 {
-                                    TileData entry;
+                                    TileData entry = DataManager.Instance.GetTile(tile.Effect.ID);
 
                                     //draw tiles
-                                    if (tile.Effect.Revealed)
-                                        entry = DataManager.Instance.GetTile(tile.Effect.ID);
-                                    else
+                                    if (!tile.Effect.Revealed)
                                         entry = DataManager.Instance.GetTile(0);
-                                    mapSheet.DrawTile(spriteBatch, destVector, entry.MinimapIcon.X, entry.MinimapIcon.Y, entry.MinimapColor * mapVis);
+                                    mapSheet.DrawTile(spriteBatch, destVector, entry.MinimapIcon.X, entry.MinimapIcon.Y, entry.MinimapColor);
                                 }
                             }
                         }
@@ -1052,7 +1006,7 @@ namespace RogueEssence.Dungeon
                             }
                         }
                         if (seeItem)
-                            mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(item.TileLoc.X, item.TileLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight), 3, 0, Color.Cyan * mapVis);
+                            mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(item.TileLoc.X, item.TileLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight), 3, 0, Color.Cyan);
                     }
 
                     foreach (Team team in ZoneManager.Instance.CurrentMap.MapTeams)
@@ -1073,7 +1027,7 @@ namespace RogueEssence.Dungeon
                                 if (seen || SeeAll)
                                 {
                                     SkinData skinData = DataManager.Instance.GetSkin(character.Appearance.Skin);
-                                    mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(character.CharLoc.X, character.CharLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight), 3, 0, skinData.MinimapColor * mapVis);
+                                    mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(character.CharLoc.X, character.CharLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight), 3, 0, skinData.MinimapColor);
                                 }
                             }
                         }
@@ -1095,7 +1049,7 @@ namespace RogueEssence.Dungeon
                                     }
                                 }
                                 if (seen || SeeAll)
-                                    mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(character.CharLoc.X, character.CharLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight), 3, 0, new Color(0, 231, 0) * mapVis);
+                                    mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(character.CharLoc.X, character.CharLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight), 3, 0, new Color(0, 231, 0));
                             }
                         }
                     }
@@ -1106,7 +1060,7 @@ namespace RogueEssence.Dungeon
                         if (!player.Dead)
                         {
                             mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(player.CharLoc.X, player.CharLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight),
-                                    3, 0, Color.Orange * mapVis);
+                                    3, 0, Color.Orange);
                         }
                     }
                     foreach (Character player in ActiveTeam.Players)
@@ -1115,10 +1069,10 @@ namespace RogueEssence.Dungeon
                         {
                             if (player == ActiveTeam.Leader)
                                 mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(player.CharLoc.X, player.CharLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight),
-                                    3, (GraphicsManager.TotalFrameTick / (ulong)FrameTick.FrameToTick(10) % 2 == 0) ? 0 : 1, Color.White * mapVis);
+                                    3, (GraphicsManager.TotalFrameTick / (ulong)FrameTick.FrameToTick(10) % 2 == 0) ? 0 : 1, Color.White);
                             else
                                 mapSheet.DrawTile(spriteBatch, mapStart + (new Vector2(player.CharLoc.X, player.CharLoc.Y) - startLoc.ToVector2()) * new Vector2(mapSheet.TileWidth, mapSheet.TileHeight),
-                                    3, 0, Color.Yellow * mapVis);
+                                    3, 0, Color.Yellow);
                         }
                     }
 
@@ -1130,8 +1084,8 @@ namespace RogueEssence.Dungeon
 
 
 
-            //HP bars
-            if (!Turn && !DataManager.Instance.Save.CutsceneMode)
+            //PMDO HP bars
+            /*if (!Turn && !DataManager.Instance.Save.CutsceneMode)
             {
                 if (ActiveTeam.Players.Count > 1)
                 {
@@ -1167,7 +1121,133 @@ namespace RogueEssence.Dungeon
                     GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(8, 0), 1, 1, (digitColor == Color.White) ? new Color(88, 248, 88) : digitColor);
                     DrawHP(spriteBatch, 14, GraphicsManager.ScreenWidth / 2, ActiveTeam.Players[0].HP, ActiveTeam.Players[0].MaxHP, digitColor);
                 }
+            }*/
+
+            //eos hud code
+            if (!Turn && !DataManager.Instance.Save.CutsceneMode)
+            {
+                Color digitColor = Color.White;
+
+                if (!ActiveTeam.Leader.Dead)
+                {
+                    if (ActiveTeam.Players[0].Fullness <= 0 && (GraphicsManager.TotalFrameTick / (ulong)FrameTick.FrameToTick(20) % 2 == 0))
+                        digitColor = new Color(255, 239, 90);
+                    if (ActiveTeam.Players[0].HP * 4 <= ActiveTeam.Players[0].MaxHP && (GraphicsManager.TotalFrameTick / (ulong)FrameTick.FrameToTick(20) % 2 == 1))
+                        digitColor = new Color(12, 20, 28);
+                }
+                //render floor and leader level
+                int count;
+                int digits = 0;
+                int offset = 0;
+                const int initialoffset = ((1 + 3) * 8) - 2; //i dont remember the logic behind this but i trust it to be sound.
+
+                /*if (bfloorcheck == true) //TODO;
+                  {
+                    GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(8, 0), 1, 6, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                    offset =+ 1;
+                  }
+                */
+                count = ActiveTeam.Leader.Level;
+                while (count > 0)
+                {
+                    count /= 10;
+                    digits++;
+                }
+                offset += digits;
+
+                count = ZoneManager.Instance.CurrentMapID.ID + 1;
+                while (count > 0)
+                {
+                    count /= 10;
+                    digits++;
+                }
+
+                offset += digits;
+                offset = (offset * 8) + initialoffset;
+
+                int barsize;
+                if ((GraphicsManager.ScreenWidth - (offset + 16)) < ActiveTeam.Leader.MaxHP) //might be optimizable
+                {
+                    barsize = GraphicsManager.ScreenWidth - (offset + 16);
+                }
+                else barsize = ActiveTeam.Leader.MaxHP;
+
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset + 3, 0), 0, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset + 11, 0), 1, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                DrawExplorersHP(spriteBatch, offset + 16, 0, barsize, ActiveTeam.Leader.HP, ActiveTeam.Leader.MaxHP, digitColor);
+
+                count = ZoneManager.Instance.CurrentMapID.ID + 1;
+                while (count > 0) //render current floor no.
+                {
+                    int digit = count % 10;
+                    GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), digit, 0);
+
+                    count /= 10;
+                    offset -= 8;
+                }
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset + 2, 0), 1, 9, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); //v.
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset - 6, 0), 1, 8, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); //L
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset - 14, 0), 1, 7, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); //F
+                offset -= 22;
+
+
+                count = ActiveTeam.Leader.Level;
+                while (count > 0) //render current leader level
+                {
+                    int digit = count % 10;
+                    GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), digit, 0);
+
+                    count /= 10;
+                    offset -= 8;
+                }
+
+               //if (ActiveTeam.Players.Count > 1 /*& hud = 2*/)
+               /* {
+                    int players = Math.Min(ActiveTeam.Players.Count, ExplorerTeam.MAX_TEAM_SLOTS);
+                    for (int ii = 0; ii < players; ii++)
+                    {
+                        if (ii != ActiveTeam.LeaderIndex)
+                        {
+                            int start = GraphicsManager.ScreenWidth / players * ii;
+                            digitColor = Color.White;
+                            if (!ActiveTeam.Players[ii].Dead)
+                            {
+                                if (ActiveTeam.Players[ii].Fullness <= 0 && (GraphicsManager.TotalFrameTick / (ulong)FrameTick.FrameToTick(20) % 2 == 0))
+                                    digitColor = new Color(255, 239, 90);
+                                if (ActiveTeam.Players[ii].HP * 4 <= ActiveTeam.Players[ii].MaxHP && (GraphicsManager.TotalFrameTick / (ulong)FrameTick.FrameToTick(20) % 2 == 1))
+                                    digitColor = new Color(12, 20, 28);
+                            }
+                            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(start, 0), 0, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(start + 8, 0), 1, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(start + 13, 0), ii + 1, 0, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                            DrawExplorersHP(spriteBatch, start + 22, 8, GraphicsManager.ScreenWidth / players - 26, ActiveTeam.Players[ii].HP, ActiveTeam.Players[ii].MaxHP, digitColor);
+                        }
+                    }
+                }*/
+                
             }
+            /*
+            if (!Turn && !DataManager.Instance.Save.CutsceneMode)
+            {
+                Color digitColor = Color.White;
+                if (!ActiveTeam.Players[0].Dead)
+                {
+                    if (ActiveTeam.Players[0].Fullness <= 0 && (GraphicsManager.TotalFrameTick / (ulong)FrameTick.FrameToTick(20) % 2 == 0))
+                        digitColor = new Color(255, 239, 90); //cba to test low hunger effect in either game so it stays
+                    if (ActiveTeam.Players[0].HP * 4 <= ActiveTeam.Players[0].MaxHP && (GraphicsManager.TotalFrameTick / (ulong)FrameTick.FrameToTick(20) % 2 == 1))//low health determiner does not factor in that the algo for it in eos rounds down so 12 would not trigger low health warning with 50 max hp but im too lazy to learn how to do that yet
+                       digitColor = new Color(12, 20, 28);
+                }
+                const int offset = 144; //change how far to the right the health bar is easily if i feel like it
+                int barsize = ActiveTeam.Players[0].MaxHP;
+                if (GraphicsManager.ScreenWidth - offset < ActiveTeam.Players[0].MaxHP) //might be optimizable
+                {
+                    barsize = GraphicsManager.ScreenWidth - offset;
+                }
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(75, 0), 0, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(83, 0), 1, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                DrawExplorersHP(spriteBatch, offset, barsize, ActiveTeam.Players[0].HP, ActiveTeam.Players[0].MaxHP, digitColor,3);
+            }*/
+            
 
             if (MenuManager.Instance.MenuCount == 0)
             {
@@ -1185,7 +1265,7 @@ namespace RogueEssence.Dungeon
 
             spriteBatch.End();
         }
-
+            
 
         protected override void PostDraw(SpriteBatch spriteBatch)
         {
@@ -1364,6 +1444,7 @@ namespace RogueEssence.Dungeon
 
 
 
+        /*
         public void DrawHP(SpriteBatch spriteBatch, int startX, int lengthX, int hp, int maxHP, Color digitColor)
         {
             //bars
@@ -1411,19 +1492,410 @@ namespace RogueEssence.Dungeon
             if (hp == 0)
                 GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 8), 0, 0);
         }
+        */
+        public void DrawExplorersHP(SpriteBatch spriteBatch, int startX, int StartY, int lengthX, int hp, int maxHP, Color digitColor)
+        {
+            //bars
+            Color color = new Color(44, 255, 52);
+            Color bg = new Color(255, 134, 93);
+            /*if (hp * 4 <= maxHP)
+                color = new Color(248, 128, 88);
+            else if (hp * 2 <= maxHP)
+                color = new Color(248, 232, 88);*/
 
-        /// <summary>
-        /// Lights up tiles for graphical reasons
-        /// </summary>
-        /// <param name="loc"></param>
-        /// <param name="sight"></param>
+            int size = (int)Math.Ceiling((double)hp * (lengthX) / maxHP);
+            GraphicsManager.Pixel.Draw(spriteBatch, new Rectangle(startX, StartY, size, 8), null, bg); // orange bg for empty health
+            GraphicsManager.Pixel.Draw(spriteBatch, new Rectangle(startX, StartY, size, 8), null, color); //health bar
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Rectangle(startX, StartY, lengthX, 8), 4, 1, Color.White);
+
+
+            //numbers
+            int total_digits_max = 0;
+            int total_digits_current = 0;
+            int test_hp = maxHP;
+
+            while (test_hp > 0) //divide by 10 until 0 to figure out how many digits are in your max hp stat
+            {
+                test_hp /= 10;
+                total_digits_max++;
+            }
+
+            test_hp = hp;
+
+            while (test_hp > 0) //divide by 10 until 0 to figure out how many digits are in your current hp stat
+            {
+                test_hp /= 10;
+                total_digits_current++;
+            }
+            int digitX = startX - 56 + ((total_digits_current + total_digits_max) * 8); //i hate this but i cant be bothered to think of a better way rn and i think it works
+
+            test_hp = maxHP;
+
+            while (test_hp > 0) //start rendering max hp
+            {
+                int digit = test_hp % 10;
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, StartY), digit, 0);
+
+                test_hp /= 10;
+                digitX -= 8;
+            }
+
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, StartY), 2, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); // render '/'
+            digitX -= 8;
+
+            test_hp = hp;
+
+            while (test_hp > 0) //render current hp
+            {
+                int digit = test_hp % 10;
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, StartY), digit, 0);
+
+                test_hp /= 10;
+                digitX -= 8;
+            }
+            /*if (hp == 0)
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, StartY), 0, 0);*/ //ngl no idea what this does or if its important
+        }
+        /*
+        public void DrawExplorersHP(SpriteBatch spriteBatch, int startX, int lengthX, int hp, int maxHP, Color digitColor)
+        {
+           // DataManager.Instance.MaxLevel;
+           // int total_digits_max = 0;
+           // ZoneManager.Instance.CurrentMapID.ID;
+
+            //check level for eu/jp sky offset
+            //check if boss floor somehow?
+            //check for basement floor here
+            //render floor number
+            //if rt check if level is 100 to use special tiles
+            //render player level
+            //skip to fixed location
+            //render 'HP'
+            //get health values
+            //render health digits
+            //render health bar
+
+
+            int leveldigits;
+            int floordigits;
+            int healthmaxdigits;
+            int healthcurrdigits;
+            int levelcapdigits;
+            int count;
+            bool isbasementfloor = false;
+
+            //get digits in level cap
+            count = DataManager.Instance.MaxLevel;
+            while (count > 0)
+            {
+                count /= 10;
+                levelcapdigits++;
+            }
+            //get digits in current floor
+            count = ZoneManager.Instance.CurrentMapID.ID;
+            while (count > 0)
+            {
+                count /= 10;
+                floordigits++;
+            }
+
+            //digits in current player level
+            count = ActiveTeam.Players[0].Level;
+            while (count > 0)
+            {
+                count /= 10;
+                leveldigits++;
+            }
+
+            //digits in player max health
+            count = maxHP;
+            while (count > 0)
+            {
+                count /= 10;
+                healthmaxdigits++;
+            }
+
+            //digits in player current health
+            count = hp;
+            while (count > 0)
+            {
+                count /= 10;
+                healthcurrdigits++;
+            }
+            /*check version
+             * 0 = rt
+             * 1 = t/d
+             * 2 = eos eu/jp
+             * 3 = eos us
+             *//*
+            int offset = 8;
+            if (version == 3 || version == 2 && ActiveTeam.Players[0].Level == 100)
+            {
+                offset = 0;
+            }
+
+            if (isbasementfloor == true) //draw 'B' and move to next tile if applicable
+            {
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), 6, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+                offset = +8;
+            }
+
+            offset += ((floordigits + 1) * 8); //offset floor position
+            
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), 7, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); // draw 'F'
+
+            count = floordigits;
+            while (count > 0) //render current floor no.
+            {
+                int digit = count % 10;
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), digit, 0);
+
+                count /= 10;
+                offset -= 8;
+            }
+
+            offset += (floordigits + 3) * 8;
+            count = floordigits;
+
+
+            if (version < 2)
+            {
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), 6, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+            }
+            else
+            {
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), 6, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+
+            }
+            offset -= 8;
+
+            while (count > 0) //render current level no.
+            {
+                int digit = count % 10;
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), digit, 0);
+
+                count /= 10;
+                offset -= 8;
+            }
+
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(offset, 0), 6, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor);
+
+
+
+
+            /*
+            floor
+            +floor+level
+            level
+            +levelcap 
+            HP letters
+            +max+curr
+            hp bar
+            hp no.
+
+            +floor+levelcap++max+curr
+            hpbar
+            hpno
+            hp letters
+            reset
+            +floor+level
+            level
+            floor
+
+
+            B99Flv.100HP999/999==============
+
+
+            *//*
+
+            //numbers the sequel
+            total_digits_max = 0;
+            total_digits_current = 0;
+            int Bfloor = 0;
+            test_hp = 1; //replace with floor variable
+
+            while (test_hp > 0) //divide by 10 until 0 to figure out how many digits are in the current floor number
+            {
+                test_hp /= 10;
+                total_digits_max++;
+            }
+
+            test_hp = ActiveTeam.Players[0].Level;
+            /*if (0 = true) //replace with floor variable (specifically basement floor one) (also uncomment loolll)
+            {
+                Bfloor = 1;
+            }*//*
+            while (test_hp > 0) //divide by 10 until 0 to figure out how many digits are in your level
+            {
+                test_hp /= 10;
+                total_digits_current++;
+            }
+            digitX = 16 + ((total_digits_current + total_digits_max + Bfloor) * 8); //i realllly hate this but i cant be bothered to think of a better way rn and i think it works
+
+            test_hp = ActiveTeam.Players[0].Level;
+
+            while (test_hp > 0) //start rendering player level
+            {
+                int digit = test_hp % 10;
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), digit, 0);
+
+                test_hp /= 10;
+                digitX -= 8;
+            }
+
+            int i = 9;
+            while (i > 6)
+            {
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), i, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); // render 'F Lv.'
+                digitX -= 8;
+                i--;
+            }
+
+            test_hp = 1;//replace with floor variable
+
+            while (test_hp > 0) //render current floor no.
+            {
+                int digit = test_hp % 10;
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), digit, 0);
+
+                test_hp /= 10;
+                digitX -= 8;
+            }
+            if(Bfloor == 1)
+            {
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(0, 0), 6, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); // render 'B' if applicable
+            }
+
+            /*
+            public void DrawExpHUD(SpriteBatch spriteBatch, int startX, int lengthX, int hp, int maxHP, Color digitColor)
+            {
+                //bars
+                Color color = new Color(44, 255, 52);
+                Color bg = new Color(255, 134, 93);
+                /*if (hp * 4 <= maxHP)
+                    color = new Color(248, 128, 88);
+                else if (hp * 2 <= maxHP)
+                    color = new Color(248, 232, 88);*//*
+
+            int size = (int)Math.Ceiling((double)hp * (lengthX) / maxHP);
+                GraphicsManager.Pixel.Draw(spriteBatch, new Rectangle(startX, 0, lengthX, 8), null, bg); // orange bg for empty health
+                GraphicsManager.Pixel.Draw(spriteBatch, new Rectangle(startX, 0, size, 8), null, color); //health bar
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Rectangle(startX, 0, lengthX, 8), 4, 1, Color.White);
+
+                //numbers
+                int total_digits_max = 0;
+                int total_digits_current = 0;
+                int test_hp = maxHP;
+
+                while (test_hp > 0) //divide by 10 until 0 to figure out how many digits are in your max hp stat
+                {
+                    test_hp /= 10;
+                    total_digits_max++;
+                }
+
+                test_hp = hp;
+
+                while (test_hp > 0) //divide by 10 until 0 to figure out how many digits are in your current hp stat
+                {
+                    test_hp /= 10;
+                    total_digits_current++;
+                }
+                int digitX = startX - 56 + ((total_digits_current + total_digits_max) * 8); //i hate this but i cant be bothered to think of a better way rn and i think it works
+
+                test_hp = maxHP;
+
+                while (test_hp > 0) //start rendering max hp
+                {
+                    int digit = test_hp % 10;
+                    GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), digit, 0);
+
+                    test_hp /= 10;
+                    digitX -= 8;
+                }
+
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), 2, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); // render '/'
+                digitX -= 8;
+
+                test_hp = hp;
+
+                while (test_hp > 0) //render current hp
+                {
+                    int digit = test_hp % 10;
+                    GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), digit, 0);
+
+                    test_hp /= 10;
+                    digitX -= 8;
+                }
+                /*if (hp == 0)
+                GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 8), 0, 0);*/ //ngl no idea what this does or if its important
+
+        //------------------------------------------------------------
+        //numbers the sequel
+        /*total_digits_max = 0;
+        total_digits_current = 0;
+        int Bfloor = 0;
+        test_hp = ZoneManager.Instance.CurrentMapID.ID; //replace with floor variable
+
+        while (test_hp > 0) //divide by 10 until 0 to figure out how many digits are in the current floor number
+        {
+            test_hp /= 10;
+            total_digits_max++;
+        }
+
+        test_hp = ActiveTeam.Players[0].Level;
+        /*if (0 = true) //replace with floor variable (specifically basement floor one) (also uncomment loolll)
+        {
+            Bfloor = 1;
+        }*//*
+        while (test_hp > 0) //divide by 10 until 0 to figure out how many digits are in your level
+        {
+            test_hp /= 10;
+            total_digits_current++;
+        }
+        digitX = 16 + ((total_digits_current + total_digits_max + Bfloor) * 8); //i realllly hate this but i cant be bothered to think of a better way rn and i think it works
+
+        test_hp = ActiveTeam.Players[0].Level;
+
+        while (test_hp > 0) //start rendering player level
+        {
+            int digit = test_hp % 10;
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), digit, 0);
+
+            test_hp /= 10;
+            digitX -= 8;
+        }
+
+        int i = 9;
+        while (i > 6)
+        {
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), i, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); // render 'F Lv.'
+            digitX -= 8;
+            i--;
+        }
+
+        test_hp = ZoneManager.Instance.CurrentMapID.ID;
+
+        while (test_hp > 0) //render current floor no.
+        {
+            int digit = test_hp % 10;
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(digitX, 0), digit, 0);
+
+            test_hp /= 10;
+            digitX -= 8;
+        }
+        if(Bfloor == 1)
+        {
+            GraphicsManager.HPMenu.DrawTile(spriteBatch, new Vector2(0, 0), 6, 1, (digitColor == Color.White) ? new Color(255, 134, 93) : digitColor); // render 'B' if applicable
+        }
+    }
+    */
+
         public void AddSeenLocs(VisionLoc loc, Map.SightRange sight)
         {
             //needs to be edited according to FOV
             Loc seen = Character.GetSightDims() + new Loc(1);
-            //however, when adding light, we only change the array if the light falls within the array
-            Loc minLoc = new Loc(loc.Loc.X - seen.X, loc.Loc.Y - seen.Y);
-            Loc addLoc = new Loc(loc.Loc.X + seen.X + 1, loc.Loc.Y + seen.Y + 1) - minLoc;
+            Loc minLoc = new Loc(Math.Max(sightRect.X, loc.Loc.X - seen.X), Math.Max(sightRect.Y, loc.Loc.Y - seen.Y));
+            Loc addLoc = new Loc(Math.Min(sightRect.End.X, loc.Loc.X + seen.X + 1), Math.Min(sightRect.End.Y, loc.Loc.Y + seen.Y + 1)) - minLoc;
             switch (sight)
             {
                 case Map.SightRange.Blind:
@@ -1436,10 +1908,7 @@ namespace RogueEssence.Dungeon
                             {
                                 if (Collision.InBounds(ZoneManager.Instance.CurrentMap.Width, ZoneManager.Instance.CurrentMap.Height, loc.Loc + new Loc(x, y))
                                     && Collision.InBounds(minLoc, addLoc, new Loc(x, y) + loc.Loc))
-                                {
-                                    if (Collision.InBounds(sightRect.Start, sightRect.Size, new Loc(x, y) + loc.Loc))
-                                        charSightValues[loc.Loc.X + x - sightRect.X][loc.Loc.Y + y - sightRect.Y] += loc.Weight;
-                                }
+                                    charSightValues[loc.Loc.X + x - sightRect.X][loc.Loc.Y + y - sightRect.Y] += loc.Weight;
                             }
                         }
                         break;
@@ -1456,10 +1925,7 @@ namespace RogueEssence.Dungeon
                             for (int y = 0; y < addLoc.Y; y++)
                             {
                                 if (Collision.InBounds(ZoneManager.Instance.CurrentMap.Width, ZoneManager.Instance.CurrentMap.Height, minLoc + new Loc(x, y)))
-                                {
-                                    if (Collision.InBounds(sightRect.Start, sightRect.Size, minLoc + new Loc(x, y)))
-                                        charSightValues[minLoc.X + x - sightRect.X][minLoc.Y + y - sightRect.Y] += loc.Weight;
-                                }
+                                    charSightValues[minLoc.X + x - sightRect.X][minLoc.Y + y - sightRect.Y] += loc.Weight;
                             }
                         }
                         break;
@@ -1472,12 +1938,7 @@ namespace RogueEssence.Dungeon
         {
             Fov.LightOperation lightOp = (int locX, int locY, float light) =>
             {
-                if (Collision.InBounds(sightRect.Start, sightRect.Size, new Loc(locX, locY)) && Collision.InBounds(ZoneManager.Instance.CurrentMap.Width, ZoneManager.Instance.CurrentMap.Height, new Loc(locX, locY)))
-                {
-                    //Can only light up tiles that have been explored
-                    if (ZoneManager.Instance.CurrentMap.DiscoveryArray[locX][locY] == Map.DiscoveryState.Traversed)
-                        charSightValues[locX - sightRect.X][locY - sightRect.Y] += start.Weight;
-                }
+                charSightValues[locX - sightRect.X][locY - sightRect.Y] += start.Weight;
             };
             Fov.CalculateAnalogFOV(rectStart, rectSize, start.Loc, VisionBlocked, lightOp);
         }
@@ -1561,28 +2022,18 @@ namespace RogueEssence.Dungeon
             {
                 if (FocusedCharacter.GetTileSight() == Map.SightRange.Clear)
                 {
-                    if (FocusedCharacter.GetCharSight() == Map.SightRange.Clear)
-                        return 1f;
-                    else
+                    if (FocusedCharacter.GetCharSight() != Map.SightRange.Clear)
                         return 1f - DARK_TRANSPARENT;
+                    else
+                        return 1f;
                 }
                 else
                     return 0f;
             }
 
-            //if it's undiscovered, it's decided-on darkness
+            //if it's undiscovered, it's black
             if (ZoneManager.Instance.CurrentMap.DiscoveryArray[loc.X][loc.Y] != Map.DiscoveryState.Traversed)
-            {
-                if (FocusedCharacter.GetTileSight() == Map.SightRange.Clear)
-                {
-                    if (FocusedCharacter.GetCharSight() == Map.SightRange.Clear)
-                        return 1f;
-                    else
-                        return 1f - DARK_TRANSPARENT;
-                }
-                else
-                    return 0f;
-            }
+                return 0f;
 
             //otherwise, use fade value
             Loc dest = loc - rectStart;
